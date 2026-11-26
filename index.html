@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="An interactive generative artwork about shopping, identity, and Sustainable Development Goal 12.">
+  <title>Made of What I Buy</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ui-accent: #da61aa;
+      --ui-wash: #f69ec1;
+      --ui-paper: #fff1ca;
+      --ui-inlay: #bded9a;
+      --ui-ink: #122840;
+      --mono: "Cascadia Mono", Consolas, monospace;
+      font: 100%/1.55 system-ui, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; background: #000; overflow: hidden; }
+    #stage { position: relative; isolation: isolate; width: 100%; height: 100vh; height: 100dvh; touch-action: pinch-zoom; }
+    .screen-canvas { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+    .arm-canvas { position: absolute; inset: 0; z-index: 1; display: block; pointer-events: none; }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    .cart {
+      --cart-icon-width: clamp(3.25rem, 6.6vw, 4.375rem);
+      position: absolute;
+      z-index: 0;
+      right: max(clamp(1.125rem, 3vw, 2.625rem), env(safe-area-inset-right));
+      bottom: max(clamp(1.125rem, 3vw, 2.625rem), env(safe-area-inset-bottom));
+      display: grid;
+      place-items: center;
+      width: calc(var(--cart-icon-width) + 1.25rem);
+      aspect-ratio: 1;
+      padding: 0;
+      border: 0;
+      color: #dce6eb;
+      background: transparent;
+      touch-action: manipulation;
+      cursor: pointer;
+    }
+    .cart[aria-disabled="true"] { color: #8495a1; }
+    .cart[data-notification]:hover { color: #f4faff; }
+    .cart:focus-visible { outline: 2px solid var(--ui-paper); outline-offset: 3px; border-radius: 50%; }
+    .cart-icon { position: relative; width: var(--cart-icon-width); aspect-ratio: 33 / 29; }
+    .cart-icon::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 21%;
+      background: currentColor;
+      clip-path: polygon(0 4%, 22% 4%, 29% 21%, 100% 21%, 85% 76%, 45% 76%, 49% 88%, 84% 88%, 84% 100%, 41% 100%, 16% 15%, 0 15%);
+    }
+    .cart-icon::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 42%;
+      width: 15%;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: calc(var(--cart-icon-width) * 0.30) 0 currentColor;
+    }
+    .cart-badge {
+      position: absolute;
+      top: 15%;
+      right: 0;
+      translate: 35% -54%;
+      display: grid;
+      place-items: center;
+      box-sizing: border-box;
+      min-width: 1.75rem;
+      height: 1.75rem;
+      padding-inline: 0.25rem;
+      border: 2px solid #080a0c;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--ui-accent) 68%, var(--ui-paper));
+      color: var(--ui-ink);
+      font: 700 0.82rem Consolas, monospace;
+      animation: notification-arrives 230ms ease-out both;
+      pointer-events: none;
+    }
+    .cart-badge[hidden] { display: none; }
+    @keyframes notification-arrives {
+      from { opacity: 0; transform: translateY(3px) scale(0.72); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .project-tab {
+      position: fixed;
+      z-index: 2;
+      inset: 50% max(0px, env(safe-area-inset-right)) auto auto;
+      translate: 0 -50%;
+      display: grid;
+      place-items: center;
+      width: 2.75rem;
+      min-height: 8.75rem;
+      padding: 1rem .5rem;
+      border: 0;
+      background: transparent;
+      color: var(--ui-ink);
+      font: 750 .8125rem/1 var(--mono);
+      letter-spacing: .025em;
+      cursor: pointer;
+    }
+    .project-tab::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-inline-end: .3rem solid var(--ui-accent);
+      background: linear-gradient(180deg, var(--ui-wash), var(--ui-paper) 92%);
+      clip-path: polygon(.7rem 0, 100% 0, 100% 100%, 0 100%, 0 .7rem);
+    }
+    .project-tab span { writing-mode: vertical-rl; }
+    .project-tab:hover::before { background: var(--ui-paper); }
+    .project-tab:focus-visible { outline: 2px solid var(--ui-paper); outline-offset: 3px; }
+
+    .project-panel {
+      --panel-gutter: clamp(1rem, 3.5vw, 1.75rem);
+      --panel-rule: color-mix(in srgb, var(--ui-ink) 20%, transparent);
+      color-scheme: light;
+      position: fixed;
+      inset: 0 0 0 auto;
+      width: min(100%, 34rem);
+      height: 100vh;
+      height: 100dvh;
+      max-width: none;
+      max-height: none;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      border: 0;
+      border-inline-start: 1px solid var(--panel-rule);
+      background: #fffef9;
+      color: var(--ui-ink);
+      box-shadow: -1rem 0 5rem #0008;
+    }
+    .project-panel[open] {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      animation: reveal-panel 220ms cubic-bezier(.2, .75, .25, 1);
+    }
+    .project-panel::backdrop { background: #0003; }
+    @keyframes reveal-panel { from { transform: translateX(100%); } }
+
+    .project-header {
+      position: relative;
+      isolation: isolate;
+      padding: max(1.35rem, env(safe-area-inset-top)) 4.6rem 1.25rem var(--panel-gutter);
+      border-bottom: .35rem solid var(--ui-inlay);
+      background: linear-gradient(119deg,
+        color-mix(in srgb, var(--ui-accent) 72%, var(--ui-paper)), var(--ui-wash) 44%, var(--ui-paper));
+    }
+    .project-header::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: repeating-linear-gradient(122deg, transparent 0 5px, #ffffff75 5px 6px);
+      mask-image: linear-gradient(95deg, transparent 20%, #000 90%);
+      pointer-events: none;
+    }
+    .project-header h1 {
+      margin: .6rem 0 0;
+      font: 700 clamp(2.3rem, 8vw, 3.6rem)/.91 Georgia, serif;
+      letter-spacing: -.055em;
+    }
+    .project-header h1 span { display: block; }
+    .project-goal {
+      margin: 0;
+      font: 700 .75rem/1.35 var(--mono);
+    }
+
+    .panel-close {
+      position: absolute;
+      inset: max(.8rem, env(safe-area-inset-top)) max(.8rem, env(safe-area-inset-right)) auto auto;
+      display: grid;
+      place-items: center;
+      width: 2.75rem;
+      height: 2.75rem;
+      padding: 0;
+      border: 1px solid var(--ui-ink);
+      background: var(--ui-ink);
+      color: #fff;
+      font: 500 1.6rem/1 system-ui, sans-serif;
+      cursor: pointer;
+    }
+    .panel-close:hover { background: var(--ui-paper); color: var(--ui-ink); }
+    .project-panel :focus-visible { outline: 2px solid var(--ui-ink); outline-offset: 3px; }
+
+    .project-content {
+      display: grid;
+      align-content: start;
+      gap: .85rem;
+      padding: .85rem max(var(--panel-gutter), env(safe-area-inset-right))
+        max(1.65rem, env(safe-area-inset-bottom)) var(--panel-gutter);
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      scrollbar-color: color-mix(in srgb, var(--ui-accent) 65%, var(--ui-ink)) #fffef9;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--ui-paper) 60%, #fff), #fffef9 15rem);
+    }
+    .project-content:focus-visible { outline-offset: -2px; }
+    .info-card {
+      min-width: 0;
+      margin: 0;
+      padding: clamp(.9rem, 3vw, 1.25rem);
+      border: 1px solid var(--panel-rule);
+      background: #fff;
+    }
+    .info-card h2 {
+      margin: 0 0 .55rem;
+      font: 700 1.36rem/1.12 Georgia, serif;
+      letter-spacing: -.026em;
+    }
+    .info-card p, .info-card ul, .info-card dl { margin: 0; }
+    .info-card > * + p { margin-top: .75rem; }
+    .project-content a { color: inherit; text-underline-offset: .15em; }
+    .project-content a:hover { text-decoration-thickness: .14em; }
+
+    .quote-card {
+      border-inline-start: .3rem solid var(--ui-accent);
+      background: linear-gradient(112deg, color-mix(in srgb, var(--ui-wash) 27%, #fff), #fff 80%);
+    }
+    .quote-card blockquote {
+      margin: 0;
+      font: 500 clamp(1.65rem, 5vw, 2.25rem)/1.06 Georgia, serif;
+      letter-spacing: -.035em;
+      text-wrap: balance;
+    }
+    .quote-card figcaption { margin-top: .6rem; font-size: .875rem; }
+    .action-card { background: var(--ui-ink); color: #fff; }
+    .call-to-action { font: 700 1.35rem/1.22 Georgia, serif; color: var(--ui-paper); }
+
+    .project-credits dl { display: grid; grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr); gap: .35rem 1rem; }
+    .project-credits dt { font-weight: 700; }
+    .project-credits dd { margin: 0; }
+    .member-list { padding: 0; list-style: none; }
+    .project-references ul { padding-inline-start: 1.2rem; }
+    .project-references li + li { margin-top: .4rem; }
+
+    .product-picker {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      min-height: 2.75rem;
+      padding: .5rem .75rem;
+      border: 1px solid var(--ui-ink);
+      background: var(--ui-inlay);
+      color: var(--ui-ink);
+      font: 700 .875rem/1.25 var(--mono);
+      cursor: pointer;
+    }
+    .product-picker:hover { background: var(--ui-paper); }
+    .product-picker:focus-within { outline: 2px solid var(--ui-ink); outline-offset: 3px; }
+    .info-card .product-status { margin: .6rem 0 0; font-size: .875rem; }
+    .info-card .product-status:empty { margin: 0; }
+
+    @media (max-width: 26rem) {
+      .project-credits dl { grid-template-columns: 1fr; gap: 0; }
+      .project-credits dd + dt { margin-top: .45rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cart-badge, .project-panel[open] { animation: none; }
+    }
+  </style>
+  <script defer src="vendor/p5.min.js"></script>
+  <script defer src="products.js"></script>
+  <script defer src="sketch.js"></script>
+</head>
+<body>
+  <main id="stage" aria-label="Made of What I Buy" aria-describedby="instructions">
+    <canvas id="fractured-screen" class="screen-canvas" aria-hidden="true"></canvas>
+    <p class="visually-hidden" id="instructions">Move the pointer, drag a finger, or use the arrow keys to guide the ASCII skeleton arm. Click, tap, or press Space to bend the index finger. Select the cart when a notification arrives to add a product fragment and crack the screen.</p>
+    <button type="button" id="shopping-cart" class="cart" aria-label="Shopping cart" aria-disabled="true">
+      <span id="cart-icon" class="cart-icon" aria-hidden="true">
+        <span id="cart-badge" class="cart-badge" hidden></span>
+      </span>
+    </button>
+    <p id="cart-status" class="visually-hidden" role="status"></p>
+  </main>
+
+  <button type="button" id="project-tab" class="project-tab" aria-controls="project-info" aria-expanded="false" aria-haspopup="dialog">
+    <span>Project info</span>
+  </button>
+
+  <dialog id="project-info" class="project-panel" aria-labelledby="project-title">
+    <header class="project-header">
+      <p class="project-goal">SDG 12 · Responsible Consumption and Production</p>
+      <h1 id="project-title">Made of <span>What I Buy</span></h1>
+      <form method="dialog">
+        <button type="submit" class="panel-close" aria-label="Close project info" autofocus><span aria-hidden="true">×</span></button>
+      </form>
+    </header>
+
+    <div class="project-content" role="region" aria-label="Project details" tabindex="0">
+      <figure class="info-card quote-card">
+        <blockquote>“The things you own end up owning you.”</blockquote>
+        <figcaption>Tyler Durden, <cite>Fight Club</cite> (1999). Screenplay by Jim Uhls, based on Chuck Palahniuk’s 1996 novel.</figcaption>
+      </figure>
+
+      <section class="info-card" id="statement" aria-labelledby="statement-title">
+        <h2 id="statement-title">When buying becomes a way to be seen</h2>
+        <p><strong>UN Sustainable Development Goal 12</strong> seeks to “ensure sustainable consumption and production patterns.” Target 12.5 focuses on preventing and reducing waste, as well as recycling and reuse. <a href="https://sdgs.un.org/goals/goal12">United Nations Goal 12</a></p>
+        <p>The line from <em>Fight Club</em>, “The things you own end up owning you,” exposes how thin the line is between mastering material possessions and becoming enslaved by them. This idea aligns with Sustainable Development Goal 12, Responsible Consumption and Production, highlighting that overconsumption is often driven by the desire to construct and define our identities. When our identity becomes tied to what we buy, we fall into an endless cycle of consumption to constantly “upgrade” our image, silently draining both global resources and personal freedom. This project explores that hidden reality by showing how material objects gradually expand, take over our space, and consume our true selves.</p>
+        <p>Notifications get faster as the session continues. Product fragments crowd the ASCII skeleton and the cracks reveal <span lang="zh-Hans">为物所困</span>, “trapped by possessions.” Reloading generates a new palette, fracture pattern, and arrangement of fragments.</p>
+      </section>
+
+      <aside class="info-card action-card">
+        <p class="call-to-action">Recognise the pattern. Question the consumption. Redefine your worth beyond material possessions.</p>
+        <p>Before your next purchase, ask whether something you already own could meet the same need.</p>
+      </aside>
+
+      <section class="info-card project-credits" id="credits" aria-labelledby="credits-title">
+        <h2 id="credits-title">Project credits</h2>
+        <dl>
+          <dt>Artist</dt>
+          <dd>Dang Tri Nhan</dd>
+          <dt>Group</dt>
+          <dd>SCP 067</dd>
+          <dt>Group members</dt>
+          <dd>
+            <ul class="member-list" role="list" lang="vi">
+              <li>Nguyễn Thanh Hoài Anh</li>
+              <li>Nguyễn Hoàng Quỳnh Anh</li>
+              <li>Trần Thanh Tâm</li>
+              <li>Phan Bảo Như Minh</li>
+              <li>Đặng Trí Nhân</li>
+            </ul>
+          </dd>
+          <dt>Course</dt>
+          <dd>COMM2754 · Digital Media Specialisation 1</dd>
+          <dt>Date</dt>
+          <dd><time datetime="2026-11-25">25 November 2026</time></dd>
+        </dl>
+        <p>RMIT University Vietnam, Saigon South Campus<br>School of Communication and Design, Digital Media Program</p>
+      </section>
+
+      <section class="info-card project-references" aria-labelledby="references-title">
+        <h2 id="references-title">References</h2>
+        <ul>
+          <li>Fincher D (director) (1999) <a href="https://www.20thcenturystudios.com/movies/fight-club"><em>Fight Club</em></a> [motion picture], 20th Century Fox, United States.</li>
+          <li>Palahniuk C (1996) <a href="https://openlibrary.org/books/OL810718M/Fight_Club"><em>Fight Club</em></a>, W. W. Norton &amp; Company, New York.</li>
+          <li>United Nations (n.d.) <a href="https://sdgs.un.org/goals/goal12"><em>Goal 12</em></a>, United Nations website, accessed 25 November 2026.</li>
+          <li>The generative artwork uses <a href="https://p5js.org/">p5.js</a> and lettering outlined from <a href="https://github.com/google/fonts/tree/main/ofl/mashanzheng">Ma Shan Zheng</a>.</li>
+        </ul>
+      </section>
+
+      <div class="info-card">
+        <label class="product-picker">
+          Choose product images
+          <input id="product-files" class="visually-hidden" type="file" accept="image/*" multiple aria-describedby="product-status">
+        </label>
+        <p id="product-status" class="product-status" role="status"></p>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    const infoDialog = document.getElementById('project-info');
+    const infoToggle = document.getElementById('project-tab');
+
+    infoToggle.addEventListener('click', () => {
+      infoDialog.showModal();
+      infoToggle.setAttribute('aria-expanded', 'true');
+    });
+    infoDialog.addEventListener('close', () => {
+      infoToggle.setAttribute('aria-expanded', 'false');
+      infoToggle.focus({ preventScroll: true });
+    });
+  </script>
+</body>
+</html>
+
